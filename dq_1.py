@@ -1,19 +1,38 @@
 import telebot
 from pymongo import MongoClient
+# from config import BOT_TOKEN, MONGO
 
+# bot = BOT_TOKEN
+bot = telebot.TeleBot("6704490108:AAGscrT9P2AadTN20eH7vRNcjPqL8WNVNtE")
+# NEW API 6704490108:AAGscrT9P2AadTN20eH7vRNcjPqL8WNVNtE
+# NEVER USE Old API, it's online NOW!!! 5622719505:AAF5EWHGxI6dbkQqRu4JMwgNdIsoR6IuCTY
 
-bot = telebot.TeleBot("5622719505:AAF5EWHGxI6dbkQqRu4JMwgNdIsoR6IuCTY")
+# @bot.message_handler(commands=['start', 'help'])
+# def send_welcome(message):
+#     welcome_message = "Привет! Я - ваш бот. Я готов помочь вам [вставьте описание функционала бота]."
+#     bot.reply_to(message, welcome_message)
 
+# @bot.message_handler(func=lambda message: True)
+# def send_welcome(message):
+#     welcome_message = "Привет! Я - ваш бот. Я готов помочь вам [вставьте описание функционала бота]."
+#     bot.reply_to(message, welcome_message)
 
 class DataBase:
 	def __init__(self):
+		# cluster = MONGO
 		cluster = MongoClient("mongodb+srv://helikeel:2aCEOKLIMczzb17U@digo-1.bgjk2no.mongodb.net/?retryWrites=true&w=majority")
 
 		self.db = cluster["QuizBot"]
 		self.users = self.db["Users"]
 		self.questions = self.db["Questions"]
 
+		# Еше одна база упраэнений для платных подписчиков
+		# self.course = self.db["Course"]
+
 		self.questions_count = len(list(self.questions.find({})))
+
+		# Получение номера урока в платном курсе
+		# self.course_cont = len(list(self.course.find({})))
 
 	def get_user(self, chat_id):
 		user = self.users.find_one({"chat_id": chat_id})
@@ -21,12 +40,16 @@ class DataBase:
 		if user is not None:
 			return user
 
+		# Добавлние новых параметров пользователь: Оплачено и Номер/Ответ Платного урока
 		user = {
 			"chat_id": chat_id,
 			"is_passing": False,
 			"is_passed": False,
+			# "paid": False,
 			"question_index": None,
-			"answers": []
+			"answers": [],
+			# "course_index": None,
+			# "course_answers": []
 		}
 
 		self.users.insert_one(user)
@@ -90,11 +113,24 @@ def next(query):
 		bot.edit_message_text(post["text"], query.message.chat.id, query.message.id,
 						 reply_markup=post["keyboard"])
 
+# Написать новый Callback	для перехода к боту оплаты
+@bot.callback_query_handler(func=lambda query: query.data == "?pay")
+def pay(query):
+	user = db.get_user(query.message.chat.id)
+
+	# Здесь вы можете сгенерировать ссылку на бот №2 с параметрами, если это необходимо
+	# payments_bot = "https://web.telegram.org/k/#@JazzVocalClassesBot"
+	payments_bot = "https://web.telegram.org/k/#@msnsgerBot"
+	# bot.send_message(message.from_user.id, f"Для оплаты перейдите по ссылке: {payments_bot}")
+	bot.send_message(query.from_user.id, f"Для оплаты перейдите по ссылке: {payments_bot}")
+	# bot.send_message(message.from_user.id, f"Для оплаты перейдите по ссылке: {payments_bot}")
+	# bot.send_message(query.from_user.id, "Вы прошли бесплатную пробную версию курса по джаз-вокалу. Для получения доступа к полной версии необходимо оформить единоразовую подписку 👍😇 для этого переведите 30 евро на счет Eugenia Evy Anstal-Põld EE282200001109459014 и укажите в пояснении свой номер телефона")
 
 def get_question_message(user):
 	if user["question_index"] == db.questions_count:
 		count = 0
 		for question_index, question in enumerate(db.questions.find({})):
+
 			if question["correct"] == user["answers"][question_index]:
 				count += 1
 		percents = round(100 * count / db.questions_count)
@@ -108,13 +144,17 @@ def get_question_message(user):
 		else:
 			smile = "😎"
 
+
 		text = f"Вы прошли бесплатную пробную версию курса по джаз-вокалу. Для получения доступа к полной версии необходимо оформить единоразовую подписку 👍😇 для этого переведите 30 евро на счет Eugenia Evy Anstal-Põld EE282200001109459014 и укажите в пояснении свой номер телефона"
+		# Встраивание новой кнопки "К оплате" >> функция запуска нового бота
+		keyboard2 = telebot.types.InlineKeyboardMarkup()
+		keyboard2.row(telebot.types.InlineKeyboardButton("Оплатить Курс 'Джаз-Вокал'", callback_data="?pay"))
 
 		db.set_user(user["chat_id"], {"is_passed": False, "is_passing": False})
 
 		return {
 			"text": text,
-			"keyboard": None
+			"keyboard": keyboard2
 		}
 
 	question = db.get_question(user["question_index"])
